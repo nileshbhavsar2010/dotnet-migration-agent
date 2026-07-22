@@ -1,0 +1,60 @@
+[submodule "microservices/AuditLogApi"]
+	path = microservices/AuditLogApi
+	url = https://github.com/nileshbhavsar2010/AuditLogApi
+[submodule "microservices/BackgroundJobWorker"]
+	path = microservices/BackgroundJobWorker
+	url = https://github.com/nileshbhavsar2010/BackgroundJobWorker
+[submodule "microservices/CacheManagementWorker"]
+	path = microservices/CacheManagementWorker
+	url = https://github.com/nileshbhavsar2010/CacheManagementWorker
+[submodule "microservices/ConfigExtensions"]
+	path = microservices/ConfigExtensions
+	url = https://github.com/nileshbhavsar2010/ConfigExtensions
+[submodule "microservices/CoreUtilities"]
+	path = microservices/CoreUtilities
+	url = https://github.com/nileshbhavsar2010/CoreUtilities
+[submodule "microservices/CryptographyHelper"]
+	path = microservices/CryptographyHelper
+	url = https://github.com/nileshbhavsar2010/CryptographyHelper
+[submodule "microservices/CustomerOrderApi"]
+	path = microservices/CustomerOrderApi
+	url = https://github.com/nileshbhavsar2010/CustomerOrderApi
+[submodule "microservices/DataTransformLibrary"]
+	path = microservices/DataTransformLibrary
+	url = https://github.com/nileshbhavsar2010/DataTransformLibrary
+[submodule "microservices/DataValidation"]
+	path = microservices/DataValidation
+	url = https://github.com/nileshbhavsar2010/DataValidation
+[submodule "microservices/EmailTemplating"]
+	path = microservices/EmailTemplating
+	url = https://github.com/nileshbhavsar2010/EmailTemplating
+[submodule "microservices/FileProcessingWorker"]
+	path = microservices/FileProcessingWorker
+	url = https://github.com/nileshbhavsar2010/FileProcessingWorker
+[submodule "microservices/FileStorageApi"]
+	path = microservices/FileStorageApi
+	url = https://github.com/nileshbhavsar2010/FileStorageApi
+[submodule "microservices/HealthMonitorWorker"]
+	path = microservices/HealthMonitorWorker
+	url = https://github.com/nileshbhavsar2010/HealthMonitorWorker
+[submodule "microservices/InventoryManagementApi"]
+	path = microservices/InventoryManagementApi
+	url = https://github.com/nileshbhavsar2010/InventoryManagementApi
+[submodule "microservices/LoggingHelper"]
+	path = microservices/LoggingHelper
+	url = https://github.com/nileshbhavsar2010/LoggingHelper
+[submodule "microservices/NotificationApi"]
+	path = microservices/NotificationApi
+	url = https://github.com/nileshbhavsar2010/NotificationApi
+[submodule "microservices/PaymentProcessingApi"]
+	path = microservices/PaymentProcessingApi
+	url = https://github.com/nileshbhavsar2010/PaymentProcessingApi
+[submodule "microservices/ProductCatalogApi"]
+	path = microservices/ProductCatalogApi
+	url = https://github.com/nileshbhavsar2010/ProductCatalogApi
+[submodule "microservices/ReportingApi"]
+	path = microservices/ReportingApi
+	url = https://github.com/nileshbhavsar2010/ReportingApi
+[submodule "microservices/UserAuthApi"]
+	path = microservices/UserAuthApi
+	url = https://github.com/nileshbhavsar2010/UserAuthApi
