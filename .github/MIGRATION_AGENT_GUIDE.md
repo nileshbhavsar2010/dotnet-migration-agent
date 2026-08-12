@@ -35,6 +35,18 @@ migrate.cmd
 
 **Then follow the interactive prompts.**
 
+If you prefer to run the migration fully automatically (no prompts), use the wrapper which runs in non-interactive mode by default:
+
+```powershell
+migrate.cmd
+```
+
+To run a dry-run (no automatic git/push/PR or scaffolding), pass `--dry`:
+
+```powershell
+migrate.cmd --dry
+```
+
 ---
 
 ## 📋 Step-by-Step Process
@@ -163,7 +175,51 @@ Skipped: 0
 
 ---
 
-### ✅ STEP 5: CHECK NUGET PACKAGES & COMPATIBILITY
+### ✅ STEP 5: CREATE OR UPDATE INTEGRATION TEST CASES
+
+**Action:** Ensure integration tests exist and are updated for the migrated .NET target.
+
+**What This Means:**
+- Detect whether an integration test project is already present
+- If not, scaffold a minimal integration test project and add a sample test case
+- If present, update project references and packages for .NET 10.0
+- Ensure the tests target the migrated application behavior
+
+**Commands:**
+```powershell
+# Example project creation
+mkdir tests\CustomerOrderApi.Integration
+cd tests\CustomerOrderApi.Integration
+dotnet new xunit --framework net10.0
+dotnet add reference ..\..\src\CustomerOrderApi\CustomerOrderApi.csproj
+```
+
+**Sample Test:**
+- Create a `CustomerOrderApiIntegrationTests.cs` file
+- Use `WebApplicationFactory<TEntryPoint>` or equivalent test host
+- Include at least one end-to-end request/response validation
+
+**Display:**
+```
+🧪 Checking integration tests...
+  ✓ Found existing integration test project
+  ✓ Updated project references for .NET 10.0
+  ✓ Created sample integration test case
+```
+
+**Why This Matters:**
+- Integration tests validate end-to-end behavior, not just unit logic
+- They catch issues with service wiring, middleware, and configuration
+- They are essential after a project version migration
+
+**Expected Outcome:**
+```
+✅ Integration tests created or updated successfully
+```
+
+---
+
+### ✅ STEP 6: CHECK NUGET PACKAGES & COMPATIBILITY
 
 **Action:** Scan all NuGet packages and check version compatibility
 
@@ -238,6 +294,8 @@ Proceed with migration? (type "yes" or "no"): yes
 ```
 ✅ User approved migration
 ```
+
+> Automation note: The migration agent supports a non-interactive mode. When the script is invoked with `-NonInteractive` or `-Auto`, the agent will assume approval and proceed without asking the user for confirmation. Use this when you want to run the full migration unattended.
 
 ---
 
