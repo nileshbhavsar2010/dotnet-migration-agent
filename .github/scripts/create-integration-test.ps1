@@ -1,6 +1,6 @@
 param(
     [string]$ProjectRoot = ".",
-    [string]$IntegrationProjectName = "CustomerOrderApi.Integration",
+    [string]$IntegrationProjectName,
     [string]$TargetFramework = "net10.0",
     [switch]$Auto
 )
@@ -10,16 +10,40 @@ function ExitWithError($msg) {
     exit 1
 }
 
+$ProjectRoot = (Resolve-Path $ProjectRoot).ProviderPath
 Write-Output "Integration test creator: checking workspace under '$ProjectRoot'..."
 
-# Find candidate application project under src/
-$appProj = Get-ChildItem -Path (Join-Path $ProjectRoot "src") -Recurse -Filter "*.csproj" -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $appProj) {
-    # fallback: find first non-test csproj
-    $appProj = Get-ChildItem -Path $ProjectRoot -Recurse -Filter "*.csproj" | Where-Object { $_.FullName -notmatch "\\tests\\" } | Select-Object -First 1
+# --- Discover the application project ---
+# Prefer src/, but don't assume a single csproj lives there.
+$srcPath = Join-Path $ProjectRoot "src"
+$candidates = @()
+if (Test-Path $srcPath) {
+    $candidates = Get-ChildItem -Path $srcPath -Recurse -Filter "*.csproj" -ErrorAction SilentlyContinue
 }
+if (-not $candidates -or $candidates.Count -eq 0) {
+    $candidates = Get-ChildItem -Path $ProjectRoot -Recurse -Filter "*.csproj" |
+        Where-Object { $_.FullName -notmatch "\\tests\\|\\bin\\|\\obj\\" }
+}
+if (-not $candidates -or $candidates.Count -eq 0) {
+    ExitWithError "Cannot find an application project to reference. Ensure a project exists under 'src/'."
+}
+if ($candidates.Count -gt 1) {
+    Write-Output "Multiple candidate projects found under src/; using the first: $($candidates[0].FullName)"
+    Write-Output "If this is wrong, re-run with an explicit -IntegrationProjectName and adjust manually."
+}
+$appProj = $candidates[0]
+$appProjName = [System.IO.Path]::GetFileNameWithoutExtension($appProj.Name)
 
-if (-not $appProj) { ExitWithError "Cannot find application project to reference. Ensure a project exists under 'src/'." }
+# --- Determine project type: Web host vs. plain library ---
+[xml]$appProjXml = Get-Content $appProj.FullName
+$sdkAttr = $appProjXml.Project.Sdk
+$isWebHost = $sdkAttr -match "Microsoft\.NET\.Sdk\.Web"
+Write-Output "Detected app project: $appProjName (Sdk=$sdkAttr, WebHost=$isWebHost)"
+
+# --- Derive integration project name if not supplied ---
+if (-not $IntegrationProjectName) {
+    $IntegrationProjectName = "$appProjName.Integration"
+}
 
 $testsFolder = Join-Path $ProjectRoot "tests"
 $integrationFolder = Join-Path $testsFolder $IntegrationProjectName
@@ -27,27 +51,47 @@ $integrationProjPath = Join-Path $integrationFolder "$IntegrationProjectName.csp
 
 if (Test-Path $integrationProjPath) {
     Write-Output "Found existing integration project: $integrationProjPath"
-    Write-Output "Updating TargetFramework and adding required packages if missing..."
+    Write-Output "Updating TargetFramework and packages if missing..."
     if ($Auto) {
-        dotnet add $integrationProjPath package Microsoft.AspNetCore.Mvc.Testing
-        # ensure target framework updated
-        (Get-Content $integrationProjPath) -replace '<TargetFramework>.*<', "<TargetFramework>$TargetFramework<" | Set-Content $integrationProjPath
+        if ($isWebHost) {
+            dotnet add $integrationProjPath package Microsoft.AspNetCore.Mvc.Testing
+        }
+        (Get-Content $integrationProjPath) -replace '<TargetFramework>.*<', "<TargetFramework>$TargetFramework<" |
+            Set-Content $integrationProjPath
     } else {
         Write-Output "Suggested commands:"
-        Write-Output "  dotnet add \"$integrationProjPath\" package Microsoft.AspNetCore.Mvc.Testing"
+        if ($isWebHost) {
+            Write-Output "  dotnet add `"$integrationProjPath`" package Microsoft.AspNetCore.Mvc.Testing"
+        }
         Write-Output "  (manually update TargetFramework to $TargetFramework in $integrationProjPath)"
     }
-} else {
-    Write-Output "No integration project found. Scaffolding new integration test project at: $integrationFolder"
-    if ($Auto) {
-        New-Item -ItemType Directory -Path $integrationFolder -Force | Out-Null
-        dotnet new xunit -n $IntegrationProjectName -o $integrationFolder --framework $TargetFramework
-        # add reference to application project
-        dotnet add $integrationProjPath reference $appProj.FullName
-        dotnet add $integrationProjPath package Microsoft.AspNetCore.Mvc.Testing
+    Write-Output "Integration test creator finished."
+    exit 0
+}
 
-        # create sample test file
-        $sample = @"
+Write-Output "No integration project found. Scaffolding new integration test project at: $integrationFolder"
+
+if (-not $Auto) {
+    Write-Output "DRY RUN (pass -Auto to actually create files). Suggested commands:"
+    Write-Output "  mkdir `"$integrationFolder`""
+    Write-Output "  dotnet new xunit -n $IntegrationProjectName -o `"$integrationFolder`" --framework $TargetFramework"
+    Write-Output "  dotnet add `"$integrationProjPath`" reference `"$($appProj.FullName)`""
+    if ($isWebHost) {
+        Write-Output "  dotnet add `"$integrationProjPath`" package Microsoft.AspNetCore.Mvc.Testing"
+    }
+    Write-Output "Integration test creator finished."
+    exit 0
+}
+
+New-Item -ItemType Directory -Path $integrationFolder -Force | Out-Null
+dotnet new xunit -n $IntegrationProjectName -o $integrationFolder --framework $TargetFramework
+dotnet add $integrationProjPath reference $appProj.FullName
+
+if ($isWebHost) {
+    # --- Web host template: spin up in-memory server, hit an endpoint ---
+    dotnet add $integrationProjPath package Microsoft.AspNetCore.Mvc.Testing
+
+    $sample = @"
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -55,11 +99,11 @@ using Xunit;
 
 namespace $IntegrationProjectName
 {
-    public class CustomerOrderApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+    public class ${appProjName}IntegrationTests : IClassFixture<WebApplicationFactory<Program>>
     {
         private readonly WebApplicationFactory<Program> _factory;
 
-        public CustomerOrderApiIntegrationTests(WebApplicationFactory<Program> factory)
+        public ${appProjName}IntegrationTests(WebApplicationFactory<Program> factory)
         {
             _factory = factory;
         }
@@ -74,16 +118,32 @@ namespace $IntegrationProjectName
     }
 }
 "@
-        $samplePath = Join-Path $integrationFolder "CustomerOrderApiIntegrationTests.cs"
-        $sample | Out-File -FilePath $samplePath -Encoding utf8
-    } else {
-        Write-Output "Suggested commands to scaffold integration test project:"
-        Write-Output "  mkdir \"$integrationFolder\""
-        Write-Output "  dotnet new xunit -n $IntegrationProjectName -o \"$integrationFolder\" --framework $TargetFramework"
-        Write-Output "  dotnet add \"$integrationProjPath\" reference \"$($appProj.FullName)\""
-        Write-Output "  dotnet add \"$integrationProjPath\" package Microsoft.AspNetCore.Mvc.Testing"
-        Write-Output "  (create a sample test file similar to CustomerOrderApiIntegrationTests.cs)"
+} else {
+    # --- Library template: call the library directly, no web host involved ---
+    $sample = @"
+using Xunit;
+
+namespace $IntegrationProjectName
+{
+    // Integration-style tests for ${appProjName}: exercise the library's
+    // public surface directly (no web host -- this is a class library).
+    // Replace this sample with real calls into $appProjName as needed.
+    public class ${appProjName}IntegrationTests
+    {
+        [Fact]
+        public void Placeholder_ReplaceWithRealIntegrationScenario()
+        {
+            // TODO: call into $appProjName here, e.g.:
+            // var result = SomeType.SomeMethod(...);
+            // Assert.True(result.IsValid);
+            Assert.True(true);
+        }
     }
 }
+"@
+}
+
+$samplePath = Join-Path $integrationFolder "${appProjName}IntegrationTests.cs"
+$sample | Out-File -FilePath $samplePath -Encoding utf8
 
 Write-Output "Integration test creator finished."
