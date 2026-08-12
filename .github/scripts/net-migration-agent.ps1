@@ -1,4 +1,5 @@
 param(
+    [string]$RepoRoot = ".",
     [string]$BranchName,
     [string]$Title = "chore: Automated migration changes",
     [string]$Body = "This pull request was created by the migration agent automation.",
@@ -16,8 +17,16 @@ function ExitWithError($msg) {
     exit 1
 }
 
+try {
+    $RepoRoot = (Resolve-Path $RepoRoot).ProviderPath
+} catch {
+    ExitWithError "Repo root path '$RepoRoot' not found."
+}
+
+Push-Location $RepoRoot
+
 function Update-GlobalJson($sdkVersion) {
-    $globalJsonPath = Join-Path (Get-Location) "global.json"
+    $globalJsonPath = Join-Path $RepoRoot "global.json"
     if (Test-Path $globalJsonPath) {
         Write-Output "Updating global.json to SDK $sdkVersion"
         Copy-Item $globalJsonPath "$globalJsonPath.backup" -Force
@@ -40,13 +49,13 @@ function Update-GlobalJson($sdkVersion) {
 
 function Update-CsprojTargetFrameworks($targetFramework) {
     Write-Output "Updating .csproj TargetFramework(s) to $targetFramework"
-    $csprojFiles = Get-ChildItem -Path (Get-Location) -Recurse -Filter "*.csproj" | Where-Object { $_.FullName -notmatch "\\bin\\|\\obj\\" }
+    $csprojFiles = Get-ChildItem -Path $RepoRoot -Recurse -Filter "*.csproj" | Where-Object { $_.FullName -notmatch "\\bin\\|\\obj\\" }
     foreach ($file in $csprojFiles) {
         $path = $file.FullName
         Write-Output "Processing $path"
         Copy-Item $path "$path.backup" -Force
         $content = Get-Content $path -Raw
-        $new = $content -replace '<TargetFrameworks>(.*?)</TargetFrameworks>', { param($m) "<TargetFrameworks>$(($m.Groups[1].Value -split ';') -replace 'net\d+\.\d+', $targetFramework -join ';')</TargetFrameworks>" }
+        $new = $content -replace '<TargetFrameworks>(.*?)</TargetFrameworks>', { param($m) "<TargetFrameworks>$((($m.Groups[1].Value -split ';') -replace 'net\d+\.\d+', $targetFramework -join ';'))</TargetFrameworks>" }
         $new = $new -replace '<TargetFramework>.*?</TargetFramework>', "<TargetFramework>$targetFramework</TargetFramework>"
         Set-Content -Path $path -Value $new -Encoding utf8
     }
@@ -54,13 +63,13 @@ function Update-CsprojTargetFrameworks($targetFramework) {
 
 function Update-NuGetPackages() {
     Write-Output "Checking for outdated NuGet packages..."
-    $csprojFiles = Get-ChildItem -Path (Get-Location) -Recurse -Filter "*.csproj" | Where-Object { $_.FullName -notmatch "\\bin\\|\\obj\\" }
+    $csprojFiles = Get-ChildItem -Path $RepoRoot -Recurse -Filter "*.csproj" | Where-Object { $_.FullName -notmatch "\\bin\\|\\obj\\" }
     foreach ($proj in $csprojFiles) {
         Write-Output "Inspecting packages for $($proj.FullName)"
         try {
             $out = dotnet list `"$($proj.FullName)`" package --outdated 2>&1
         } catch {
-            Write-Output "Failed to list packages for $($proj.FullName): $_"
+            Write-Output ("Failed to list packages for {0}: {1}" -f $proj.FullName, $_)
             continue
         }
         foreach ($line in $out) {
@@ -71,7 +80,7 @@ function Update-NuGetPackages() {
                 try {
                     dotnet add `"$($proj.FullName)`" package $pkg -v $latest
                 } catch {
-                    Write-Output "Failed to update $pkg: $_"
+                    Write-Output ("Failed to update {0}: {1}" -f $pkg, $_)
                 }
             }
         }
@@ -83,7 +92,7 @@ function Apply-CodeFixes() {
     try {
         dotnet format
     } catch {
-        Write-Output "dotnet format failed or not available: $_"
+        Write-Output "dotnet format failed or not available: $($_)"
     }
 }
 
@@ -117,11 +126,11 @@ if ($CreateIntegration) {
     if (Test-Path $createScript) {
         if ($Auto -or $SimpleConfirm) {
             Write-Output "Running integration test scaffolding (Auto/SimpleConfirm mode)..."
-            & $createScript -ProjectRoot (Get-Location) -Auto -IntegrationProjectName "$((Get-Location).Basename).Integration" -TargetFramework $TargetFramework
+            & $createScript -ProjectRoot $RepoRoot -Auto -IntegrationProjectName "$(Split-Path $RepoRoot -Leaf).Integration" -TargetFramework $TargetFramework
         } else {
             Write-Output "DRY RUN: Integration creation requested but neither -Auto nor -SimpleConfirm provided."
             Write-Output "Suggested command:"
-            Write-Output "  powershell -ExecutionPolicy Bypass -File .github/scripts/create-integration-test.ps1 -ProjectRoot . -IntegrationProjectName <Name> -TargetFramework $TargetFramework -Auto"
+            Write-Output "  powershell -ExecutionPolicy Bypass -File .github/scripts/create-integration-test.ps1 -ProjectRoot $RepoRoot -IntegrationProjectName '<Name>' -TargetFramework $TargetFramework -Auto"
         }
     } else {
         Write-Output "Integration creation script not found at: $createScript"
@@ -227,7 +236,8 @@ if ($Auto) {
         } catch {}
 
         # Normalize remote to owner/repo
-        $repo = $remote -replace '^.*[:/]', '' -replace '\.git$',''
+        $repo = $remote -replace '^.*[:/]', ''
+        $repo = $repo -replace '\\.git$',''
         $compareUrl = "https://github.com/$repo/compare/$defaultBranch...$BranchName?expand=1"
         Write-Output $compareUrl
     }
