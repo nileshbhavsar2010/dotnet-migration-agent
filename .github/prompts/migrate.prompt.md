@@ -3,19 +3,37 @@ description: "Run the full .NET migration pipeline: analyze, scaffold tests, app
 ---
 Migrate this project to .NET ${input:targetVersion:10.0}.
 
-Run these steps in order, using the matching skill for each.
+Before making any change, ask the user exactly what they want changed.
+Do not assume the migration should include integration tests, package upgrades,
+project-file edits, or a PR. Stop and ask the user to confirm the change scope
+before running any file-modifying step.
+
+When the user answers, follow only that scope.
 
 1. Analyze the current project state and produce an update specification
    (net-migration-analyzer). Do not modify any files in this step.
-2. Detect or scaffold integration test coverage for the affected projects
-   (net-migration-integration).
-3. Apply the update specification from step 1 to global.json, .csproj files,
-   and NuGet packages, with backup/rollback on failure (net-migration-updater).
+2. Only if the user explicitly approved integration-test creation or broader
+   migration work, detect or scaffold integration test coverage for the
+   affected projects (net-migration-integration).
+3. Apply only the user-approved changes from step 1 to global.json, .csproj
+   files, and NuGet packages, with backup/rollback on failure
+   (net-migration-updater).
 4. Restore, build, and run tests to verify the migration
    (net-migration-verifier). If this step fails, stop here — do not proceed
    to step 5 — and report the failure with enough detail to fix it.
-5. Only if step 4 succeeded: create a migration branch, commit the changes,
-   push it, and open a pull request (net-migration-pr).
+5. Only if step 4 succeeded and the user explicitly approved a PR: create a
+   migration branch, commit the approved changes, push it, and open a pull
+   request (net-migration-pr).
+
+If the user does not specify a change set, ask them one of these questions:
+- framework-only changes
+- framework + package updates
+- framework + package updates + integration tests
+- full migration + PR
+- no changes / stop
+
+Never auto-create a PR or a test project from a copied .github folder without
+explicit user approval.
 
 ## Failure handling — no silent failures
 After each step, check its actual result — the process/script exit code or
